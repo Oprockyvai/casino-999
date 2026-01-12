@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: cv999_casino
+      POSTGRES_USER: cv999_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cv999-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - cv999-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: cv999_admin
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: cv999_casino
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}  # NEW
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - cv999-network
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:3000
+      NEXT_PUBLIC_ADMIN_URL: /admin-login  # User sees this
+    ports:
+      - "80:3000"
+    depends_on:
+      - api
+    networks:
+      - cv999-network
+
+  admin-panel:  # NEW SERVICE
+    build:
+      context: ./apps/admin-panel
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_ADMIN_API_URL: http://api:3000/admin
+      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY}
+    ports:
+      - "3001:3000"  # Different port for admin
+    depends_on:
+      - api
+    networks:
+      - cv999-network
+
+networks:
+  cv999-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
